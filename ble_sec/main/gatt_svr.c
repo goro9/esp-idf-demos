@@ -26,6 +26,7 @@
 #include "services/gatt/ble_svc_gatt.h"
 #include "bleprph.h"
 
+const static char *TAG = "ble_sec";
 /**
  * The vendor specific security test service consists of two characteristics:
  *     o random-number-generator: generates a random 32-bit number each time
@@ -40,6 +41,11 @@ static const ble_uuid128_t gatt_svr_svc_sec_test_uuid =
     BLE_UUID128_INIT(0x2d, 0x71, 0xa2, 0x59, 0xb4, 0x58, 0xc8, 0x12,
                      0x99, 0x99, 0x43, 0x95, 0x12, 0x2f, 0x46, 0x59);
 
+/* 5c3a659e-897e-45e1-b016-007107c96df5 */
+static const ble_uuid128_t gatt_svr_chr_sec_test_auth_uuid =
+    BLE_UUID128_INIT(0xf5, 0x6d, 0xc9, 0x07, 0x71, 0x00, 0x16, 0xb0,
+                     0xe1, 0x45, 0x7e, 0x89, 0x9e, 0x65, 0x3a, 0x5c);
+
 /* 5c3a659e-897e-45e1-b016-007107c96df6 */
 static const ble_uuid128_t gatt_svr_chr_sec_test_rand_uuid =
     BLE_UUID128_INIT(0xf6, 0x6d, 0xc9, 0x07, 0x71, 0x00, 0x16, 0xb0,
@@ -51,6 +57,8 @@ static const ble_uuid128_t gatt_svr_chr_sec_test_static_uuid =
                      0xe1, 0x45, 0x7e, 0x89, 0x9e, 0x65, 0x3a, 0x5c);
 
 static uint8_t gatt_svr_sec_test_static_val;
+#define DEVICE_TOKEN    "\xae\x2c\xb3\x34\x95\xa5\x5f\x11\xa9\xf1\x5e\xcb\x1e\x53\xcc\x7e" \
+                        "\xeb\x7b\x4c\x61\xf0\x00\xcf\x21\x42\x77\xca\xb1\x13\x6b\xca\xb6"
 
 static int
 gatt_svr_chr_access_sec_test(uint16_t conn_handle, uint16_t attr_handle,
@@ -63,18 +71,27 @@ static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
         .type = BLE_GATT_SVC_TYPE_PRIMARY,
         .uuid = &gatt_svr_svc_sec_test_uuid.u,
         .characteristics = (struct ble_gatt_chr_def[])
-        { {
+        { 
+            {
+                /*** Characteristic: Authentication. */
+                .uuid = &gatt_svr_chr_sec_test_auth_uuid.u,
+                .access_cb = gatt_svr_chr_access_sec_test,
+                .flags = BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_ENC,
+            },
+            {
                 /*** Characteristic: Random number generator. */
                 .uuid = &gatt_svr_chr_sec_test_rand_uuid.u,
                 .access_cb = gatt_svr_chr_access_sec_test,
                 .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC,
-            }, {
+            },
+            {
                 /*** Characteristic: Static value. */
                 .uuid = &gatt_svr_chr_sec_test_static_uuid.u,
                 .access_cb = gatt_svr_chr_access_sec_test,
                 .flags = BLE_GATT_CHR_F_READ |
                 BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_ENC,
-            }, {
+            },
+            {
                 0, /* No more characteristics in this service. */
             }
         },
@@ -90,11 +107,7 @@ gatt_svr_chr_write(struct os_mbuf *om, uint16_t min_len, uint16_t max_len,
                    void *dst, uint16_t *len)
 {
     uint16_t om_len;
-    int rc;
-
-    om_len = OS_MBUF_PKTLEN(om);
-    if (om_len < min_len || om_len > max_len) {
-        return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+    int rc;ble_gatt_chr_def;
     }
 
     rc = ble_hs_mbuf_to_flat(om, dst, max_len, len);
@@ -119,6 +132,12 @@ gatt_svr_chr_access_sec_test(uint16_t conn_handle, uint16_t attr_handle,
     /* Determine which characteristic is being accessed by examining its
      * 128-bit UUID.
      */
+
+    if (ble_uuid_cmp(uuid, &gatt_svr_chr_sec_test_auth_uuid.u) == 0) {
+        ESP_LOGW(TAG, "start authentication!!");
+        rc = 0;
+        return rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
+    }
 
     if (ble_uuid_cmp(uuid, &gatt_svr_chr_sec_test_rand_uuid.u) == 0) {
         assert(ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR);
